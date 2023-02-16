@@ -1,0 +1,36 @@
+- trigger:
+  - platform: time_pattern
+    #hours: 0
+   # minutes: "/1"
+    seconds: "/5"
+  sensor:
+    - name: kwh_est_hour
+      unit_of_measurement: "kWh"
+      state: >
+        {%if now().minute == 0 %}
+          {{ ((states('sensor.power_avg_20s')|int(default=0) / 1000|int)/60*(60-1))|round(2) }}
+        {% else %}
+          {{ (((states('sensor.power_avg_20s')|int(default=0) / 1000|int)/60*(60-now().minute))|round(2) + states('sensor.hour_total_kwh')|float(default=0))|round(3)}}
+        {% endif %}
+
+- binary_sensor:
+    - name: "Effektbegrenser"
+      delay_on:
+        minutes: 15
+      delay_off:
+        minutes: 4
+      state: >
+          {% if states('sensor.kwh_est_hour')|float(default=0) > states('input_number.effekttariff_max_kwh')|float(default=0) and now().minute|int(default=0) >= 15 %}
+            on
+          {% else %}
+            off
+          {% endif %}
+
+#ams_power_failed. Ingen oppdatert data på 2 minutter. 
+- binary_sensor:
+  - name: "AMS Power failed"
+    delay_on:
+      seconds: 120
+    delay_off: 
+      seconds: 5
+    state: "{{  (now() - states.sensor.kaifa_active_power_import.last_updated) > timedelta(seconds=10) }}"
