@@ -1,0 +1,53 @@
+- id: "080120232343"
+  alias: "Effektbegrenser trinn 3"
+  trigger: 
+    - platform: numeric_state
+      entity_id: input_number.effektbegrenser_trinn
+      above: 2
+      id: "begrens"
+    - platform: numeric_state
+      entity_id: input_number.effektbegrenser_trinn
+      below: 3
+      id: "frigi"
+  action: 
+  #Begrens
+    - if: 
+      - condition: trigger
+        id: "begrens"
+      then:
+      - if: 
+        - condition: template
+          value_template: "{{ states('switch.varmtvannstank') == 'on' }}"
+        then:
+          - service: switch.turn_off
+            entity_id: switch.varmtvannstank
+          - service: notify.admin
+            data:
+              title: Effektbegrenser Steg 3
+              message: VVB skrudd av. 
+        else:
+          - service: notify.admin
+            data:
+              title: Effektbegrenser Steg 3
+              message: VVB var allerede av. Går videre til steg 4. 
+          - service: input_number.set_value
+            entity_id: input_number.effektbegrenser_trinn
+            data:
+              value: 4
+      #Frigi 
+      else:
+        - if: 
+          - condition: template
+            value_template: "{{ is_state('binary_sensor.VVB_billigst', 'on') }}" # Samlesensor for alle tre valg i lovelance.
+          then:
+            - service: notify.admin
+              data:
+                title: Effektbegrenser Steg 3 frigitt
+                message: VVB skrudd på. 
+            - service: switch.turn_on
+              entity_id: switch.varmtvannstank
+          else:
+            - service: notify.admin
+              data:
+                title: Effektbegrenser Steg 3 frigitt
+                message: VVB fortsatt av. 
