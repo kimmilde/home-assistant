@@ -1,0 +1,119 @@
+# Automasjoner i denne filen styrer
+# hvor mye effektbegrenseren skal dra på 
+# fra 0-5 og ned fra 5-0. 
+
+# Setter på effektbegrenser fra 0-5
+- id: "231120212212"
+  alias: "Tariff effektbegrenser begrens"
+  trigger: 
+    - platform: state
+      entity_id: binary_sensor.effektbegrenser
+      to: 'on'
+      id: "begrens"
+  action: 
+    - if: 
+        # Før effektbegrenser starter sjekker vi om 
+        # lading av elbil pågår. Hvis ladingen pågår 
+        # sjekker vi om ladefarten må justeres før last
+        # i huset reduseres. 
+      - condition: state
+        entity_id: sensor.easee_home_17846_status
+        state: 'charging'
+      - or: 
+          - condition: state
+            entity_id: binary_sensor.tesla_mqtt_plugged_in
+            state: 'true'
+          - condition: state
+            entity_id: device_tracker.tesla
+            state: 'home'
+      then:
+         # Hvis lading pågår, sett ned farten på tesla ned med 5 amps
+         # Kontroller i tilegg at automasjonen for regulering
+         # av ladehastighet kjører, hvis ikke
+         # start denne automasjonen 
+        - service: input_number.set_value
+          data_template:
+            entity_id: input_number.model3_charge_amps
+            value: "{{ states('input_number.model3_charge_amps')|int - 5|int }}"
+        - service: rest_command.tesla_set_charge_amps
+        - if: 
+          - condition: state
+            entity_id: automation.easee_juster_ladefart_kontinuerlig
+            attribute: current
+            state: 0
+          then: 
+            - service: automation.trigger
+              data:
+                entity_id: automation.easee_juster_ladefart_kontinuerlig
+    - repeat:
+        while: 
+        - condition: state
+          entity_id: binary_sensor.effektbegrenser
+          state: 'on'
+        - condition: template
+          value_template: "{{ states('input_number.effektbegrenser_trinn')|int <= 6}}"
+        sequence: 
+          - service: input_number.set_value
+            entity_id: input_number.effektbegrenser_trinn
+            data_template:
+              value: "{{ states('input_number.effektbegrenser_trinn')|int + 1|int }}"
+          - delay: "00:05:00"
+       
+
+# Denne automasjonen sjekker når effektbegrenser
+# går av hvor mye som kan legges på av effekt.
+# For å unngå ^^^(jojo) kjøring med 
+# av og på av strøm sjekker vi at det er 
+# tilgjengelig med strøm i huset før vi 
+# legger inn mer last/strøm. 
+- id: "241120212101"
+  alias: "Tariff effektbegrenser frigi"
+  mode: queued
+  trigger: 
+    - platform: state
+      entity_id: binary_sensor.effektbegrenser
+      to: 'off'
+    - platform: template
+      value_template: "{{ now().minute is in [0,10,20,30,40,50] and states('input_number.effektbegrenser_trinn')|int > 0}}"
+  action:   
+    repeat:
+      while: 
+      - and: 
+        - condition: numeric_state
+          entity_id: input_number.effektbegrenser_trinn
+          above: 0
+        - condition: template
+        # Trinnene under består av teoretisk som kan kobles inn i hvert trinn 
+        # Fra trinn 1->0 må det være 1000W tilgjengelig
+        # Fra trinn 2->1 må det være 1000W tilgjengelig
+        # Fra trinn 3->2 må det være 2200W tilgjengelig
+        # Fra trinn 4->3 må det være 1300W tilgjengelig. 
+        # Fra trinn 5->4 må det være 0W tilgjengelig. 
+        # Hvis trinn ikke er i et gyldig steg settes 0W
+          value_template: >
+            {% set begrenser = states('input_number.effektbegrenser_trinn') %}
+            {% if begrenser|int == 1 %}
+              {% set effektbegrenser = 1000 %}
+            {% elif begrenser|int == 2 %}
+              {% set effektbegrenser = 1000 %}
+            {% elif begrenser|int == 3 %}
+              {% set effektbegrenser = 2200 %}
+            {% elif begrenser|int == 4 %}
+              {% set effektbegrenser = 1300 %}
+            {% elif begrenser|int == 5 %}
+              {% set effektbegrenser = 0 %}
+            {% else %}
+              {% set effektbegrenser = 0 %}
+            {%endif%}
+              {{  (states('sensor.kwh_est_hour')|float + ((effektbegrenser/1000)/60)*now().minute) < states('input_number.effekttariff_max_kwh')|float }}
+      sequence: 
+        - service: input_number.set_value
+          entity_id: input_number.effektbegrenser_trinn
+          data_template:
+            value: >
+              {% if states('input_number.effektbegrenser_trinn')|int > 0  %}
+                {{ states('input_number.effektbegrenser_trinn')|int - 1|int }}
+              {%else%}
+                0
+              {%endif%}
+        - delay: "00:03:00"
