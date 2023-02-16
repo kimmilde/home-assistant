@@ -27,15 +27,9 @@
             entity_id: device_tracker.tesla
             state: 'home'
       then:
-         # Hvis lading pågår, sett ned farten på tesla ned med 5 amps
-         # Kontroller i tilegg at automasjonen for regulering
+         # Kontroller at automasjonen for regulering
          # av ladehastighet kjører, hvis ikke
          # start denne automasjonen 
-        - service: input_number.set_value
-          data_template:
-            entity_id: input_number.model3_charge_amps
-            value: "{{ states('input_number.model3_charge_amps')|int - 5|int }}"
-        - service: rest_command.tesla_set_charge_amps
         - if: 
           - condition: state
             entity_id: automation.easee_juster_ladefart_kontinuerlig
