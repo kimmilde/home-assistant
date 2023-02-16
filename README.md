@@ -1,2 +1,2 @@
-# home-assistant
-My home-assistant config
+# Min Home Assistant config
+
