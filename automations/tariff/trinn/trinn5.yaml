@@ -1,0 +1,15 @@
+- id: "090120230001"
+  alias: "Effektbegrenser trinn 5"
+  trigger: 
+    - platform: numeric_state
+      entity_id: input_number.effektbegrenser_trinn
+      above: 4
+  action: 
+  #Begrens
+    - service: notify.admin
+      data:
+        title: Effektbegrenser maks
+        message: >-
+          Klarer ikke å begrense strømforbruket. Forventet strømbruk denne timen {{ states('sensor.kwh_est_hour')|round(2) }} kWh. 
+          Maks strømbruk før ny tariff-trinn {{ states('input_number.effekttariff_max_kwh')}} kWh.
+          Effekt nå {{ states('sensor.kaifa_active_power_import')}} W. 
