@@ -38,6 +38,11 @@
               title: Effektbegrenser aktivert i steg 1
               message: Avfukter allerede av. Går videre. 
     else:
+      - service: climate.set_temperature
+        data_template:
+          entity_id: climate.termostat_vindfang
+          temperature: "{{ state_attr('climate.termostat_vindfang', 'temperature')|float(default=0) + 1.5 }}"
+          hvac_mode: heat
       - if: 
           condition: state
           entity_id: input_boolean.effektbegrenser_avfukter_var_pa
