@@ -224,7 +224,7 @@
             then: 
               - service: easee.action_command
                 data:
-                  charger_id: EH178467
+                  charger_id: XX
                   action_command: pause
 
           - if: 
@@ -252,7 +252,7 @@
                 then: 
                   - service: easee.action_command
                     data:
-                      charger_id: EH178467
+                      charger_id: XXX
                       action_command: resume
                   - service: input_number.set_value
                     data_template:
