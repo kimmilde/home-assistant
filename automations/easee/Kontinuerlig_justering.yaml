@@ -267,7 +267,7 @@
             # delay i kun 30 sekunder, ellers 60 sekunder. 
           - delay: 
               seconds: >
-                {% if now().minute > 45 %}
+                {% if now().minute > 45 or states('binary_sensor.effektbegrenser') == 'on' %}
                   30
                 {% else %}
                   60
