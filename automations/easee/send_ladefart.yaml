@@ -24,7 +24,7 @@
         - service: easee.set_charger_dynamic_limit
           data_template: 
             charger_id: XXX
-            current: "{{ states('input_number.easee_set_current') }}"
+            current: "{% if is_state('input_boolean.easee_master', 'on') %}{{ states('input_number.easee_set_current') }}{%else%}32{%endif%}"
       else: 
         - service: input_number.set_value
           data_template:
