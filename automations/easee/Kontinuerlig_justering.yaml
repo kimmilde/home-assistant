@@ -1,15 +1,18 @@
     # Hvis tesla er plugget i og er hjemme, sett easee_master til av
-    # Da betyr det at ladefart justeres via tesla API. 
+    # Da betyr det at ladefart justeres fra tesla API. 
     # Hvis en annen bil tilkobles lader settes easee_maser til på 
-    # Da betyr det at ladefart justeres via easee API.    
+    # Da betyr det at ladefart justeres fra easee API.    
 
 - id: "290120232156"
   alias: "Easee. Bestem master"
   trigger: 
     - platform: state
-      entity_id: sensor.easee_home_17846_status
+      entity_id: sensor.easee_home_ID_status
       from: 'disconnected'
       for: "00:01:00"
+    #- platform: state
+    #  entity_id: sensor.easee_home_ID_status
+    #  to: "charging"
   action: 
     - delay: "00:00:10"
     - if:
@@ -43,23 +46,24 @@
 
 
 
-# Hvis pulse slutter å sende data må vi gjøre tiltak.
-# Automasjonen under bestemmer hvilken konstante ladefart 
-# vi skal lade med ved AMS feil
 
 - id: "111120221155"
-  alias: "Easee. Stopp lading ved AMS feil"
+  alias: "Easee. Begrens lading ved AMS feil"
   trigger: 
     - platform: state
       entity_id: binary_sensor.ams_power_failed
       to: 'on'
       for: 
-        minutes: 5
+        minutes: 3
   condition: 
     - condition: state
-      entity_id: sensor.easee_home_17846_status
+      entity_id: sensor.easee_home_ID_status
       state: 'charging'
   action: 
+    - service: notify.admin
+      data:
+        title: Lading redusert
+        message: Lading redusert grunnet ingen kontakt med AMS måler
     - if: 
       - condition: state
         entity_id: binary_sensor.tesla_mqtt_plugged_in
@@ -75,7 +79,7 @@
             # Ved 2-5 trinn lad med 6A (1,3kW), ved 5-10 lad med ca 5kW
             value: > 
               {% set max_kwh = states('input_number.tariff_max_kwh')|float %}
-              {% set phases = state_attr('sensor.easee_home_17846_status', 'config_phaseMode')|float %}
+              {% set phases = state_attr('sensor.easee_home_ID_status', 'config_phaseMode')|float %}
               {% if max_kwh <= 5 %}
                 6
               {% elif max_kwh <= 10 and phases == 1 %}
@@ -93,7 +97,7 @@
             # Ved 2-5 trinn lad med 6A (1,3kW), ved 5-10 lad med ca 5kW
             value: >
               {% set max_kwh = states('input_number.tariff_max_kwh')|float %}
-              {% set phases = state_attr('sensor.easee_home_17846_status', 'config_phaseMode')|float %}
+              {% set phases = state_attr('sensor.easee_home_ID_status', 'config_phaseMode')|float %}
               {% if max_kwh <= 5 %}
                 6
               {% elif max_kwh <= 10 and phases == 1 %}
@@ -105,27 +109,13 @@
               {%endif %}
 
 
-# Denne automasjonen justerer ladefarten kontinuerlig
-# enten via tesla api eller easee api. 
-# Automasjone virker på den måten at det sjekkes hvor mye strøm som er 
-# tilgjenglig å bruke ut i fra maks kWh grense. 
-# Øking av lading økes med 1A hvert minutt for en rolig oppramping. 
-# Hvis det er veldig lite strøm tilgjengelig kan strøm reduseres noe hurtigere.
 
-# Ved en eventuell pause i lading grunnet høyt strømforbruk 
-# vil ladingen gå ned til 6A, deretter vil ladefarten
-# kontinuerlig telle helt ned til -10A (uten at ladefarten endres eller
-# sendes til easee/tesla api). Når ladefarten kommer til -10A pauses lading.
-# For at ladingen skal restartes telles det videre oppover fra -10 til 3.
-# Det sjekkes så at det er nok strøm tilgjengelig for å starte lading (1200W) 
-# Hvis det er nok strøm tilgjengelig startes lading og den rampes rolig oppover. 
-# Er det ikke nok strøm tilgjengelig sjekkes det hvert minutt om det kan startes. 
 
 - id: "020820222027"
   alias: "Easee. Juster ladefart kontinuerlig"
   trigger: 
     - platform: state
-      entity_id: sensor.easee_home_17846_status
+      entity_id: sensor.easee_home_ID_status
       to: 'charging'
     - platform: state
       entity_id: binary_sensor.ams_power_failed
@@ -143,26 +133,15 @@
         - condition: state
           entity_id: binary_sensor.ams_power_failed
           state: 'off'
-          
         # Easee ladeboks lader eller venter på start
         - condition: state
-          entity_id: sensor.easee_home_17846_status
+          entity_id: sensor.easee_home_ID_status
           state: 
             - 'charging'
             - 'awaiting_start'
-            
         # Easee ladeboks er klar, og utsatt lading planlagt er av
         - condition: template
-          value_template: "{{ not (states('sensor.easee_home_17846_status') == 'awaiting_start' and states('automation.easee_planlagt_lading_start') == 'on') }}"
-          
-        # OVMS (kia) er kommet til riktig ladegrense
-        - and: 
-          - condition: state
-            entity_id: input_boolean.easee_master
-            state: 'on'
-          - condition: state
-            entity_id: input_boolean.ovms_fully_charged
-            state: 'off'
+          value_template: "{{ not (states('sensor.easee_home_ID_status') == 'awaiting_start' and states('automation.easee_planlagt_lading_start') == 'on') }}"
         sequence: 
           - delay: "00:00:15"
           # Beregn ladehastighet
@@ -178,7 +157,7 @@
                 {% set new_A = states(entity_new_a)|int(default=5) %}
                 {% set P = ((states('input_number.effekttariff_max_kwh')|float - states('sensor.kwh_est_hour')|float)*1000) / 230 %}
                 {% if states('input_boolean.easee_master') == 'on' %}
-                  {% if P|int > 3 %}
+                  {% if P|int > 1 %}
                     {% set new_A  = states(entity_new_a)|int(default=5) + 1 %}
                   {%endif%}
                 {%else%}
@@ -202,10 +181,6 @@
           - if: 
             # Hvis effektbegrenser går på, eller ladeverdi er under -9
             # pause lading. 
-            # TO DO
-            # Ikke stopp lading hvis effektbegrenser går på. 
-            # Gjør heller andre tiltak enn direkte stopp 
-            # TO DO SLUTT
             - or: 
               #- condition: state
               #  entity_id: binary_sensor.effektbegrenser
@@ -219,12 +194,12 @@
                     entity_id: input_number.easee_set_current
                     below: -9
                 - condition: state
-                  entity_id: sensor.easee_home_17846_status
+                  entity_id: sensor.easee_home_ID_status
                   state: 'charging'
             then: 
               - service: easee.action_command
                 data:
-                  charger_id: XX
+                  charger_id: EHID7
                   action_command: pause
 
           - if: 
@@ -239,20 +214,20 @@
                 below: 4
                 above: 2
             - condition: state
-              entity_id: sensor.easee_home_17846_status
+              entity_id: sensor.easee_home_ID_status
               state: 'awaiting_start'
             then:        
             # Sjekk at det er nok strøm tilgjengelig for å starte lading på laveste nivå. 
             # Hvis det er nok strøm tilgjengelig. Start lading og sett ladefart til 6A. 
-            # Hvis det ikke er nok strøm tilgjengelig, sett verdien til 2, slik at beregninger
-            # fortsetter.         
+            # Hvis det ikke er nok strøm tilgjengelig, sett verdien til 2, slik at det 
+            # sjekkes om 1 min at det er nok strøm for å starte lading        
               - if: 
                 - condition: template
                   value_template: "{{ ((states('input_number.effekttariff_max_kwh')|float - states('sensor.kwh_est_hour')|float)*1000) / 230 > 5 }}"
                 then: 
                   - service: easee.action_command
                     data:
-                      charger_id: XXX
+                      charger_id: EHID7
                       action_command: resume
                   - service: input_number.set_value
                     data_template:
@@ -265,6 +240,8 @@
                       value: 2
             # Hvis det er mindre enn 15 minutter før timesbytte
             # delay i kun 30 sekunder, ellers 60 sekunder. 
+            # Dette for å få hurtigere reguleringen når det nærmer
+            # seg timesbytte
           - delay: 
               seconds: >
                 {% if now().minute > 45 or states('binary_sensor.effektbegrenser') == 'on' %}
@@ -272,4 +249,4 @@
                 {% else %}
                   60
                 {% endif %}
-              
+
